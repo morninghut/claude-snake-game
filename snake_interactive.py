@@ -507,8 +507,8 @@ class SnakeGame:
                 color = curses.color_pair(4)
             self.stdscr.addch(sy, sx, char, color | curses.A_BOLD)
 
-        # Score popup
-        if self.score_popup:
+        # Score popup (only show when playing)
+        if self.score_popup and self.state == State.PLAYING:
             pos, text, _ = self.score_popup
             self.stdscr.addstr(pos[1], pos[0], text, curses.color_pair(2) | curses.A_BOLD)
 
@@ -562,6 +562,7 @@ class SnakeGame:
         self.stdscr.nodelay(True)
         self.stdscr.timeout(10)
         self.quit = False
+        self.waiting_for_input = False  # Wait for input on game over
 
         while not self.quit:
             self.handle_input()
@@ -569,8 +570,11 @@ class SnakeGame:
             if self.state == State.PLAYING:
                 curses.napms(self.speed)
                 self.update()
+                self.waiting_for_input = False
             elif self.state == State.GAME_OVER and self.game_over:
-                self.quit = True
+                # Wait for user input (R or Q) before quitting
+                if not self.waiting_for_input:
+                    self.waiting_for_input = True
 
             self.draw()
 
