@@ -102,7 +102,7 @@ FOOD_SCORE: int = 10
 SPEED_INCREASE_INTERVAL: int = 5
 SPEED_MULTIPLIER: float = 0.85
 SLOW_MULTIPLIER: float = 1.3
-FOOD_PULSE_CYCLE: int = 20
+FOOD_PULSE_CYCLE: int = 6  # Fast blink (every 3 frames)
 SCORE_POPUP_DURATION: int = 30
 MAX_INPUT_QUEUE: int = 2
 SPAWN_MAX_ATTEMPTS: int = 100
@@ -510,20 +510,24 @@ class SnakeGame:
 
     def draw(self) -> None:
         """Draw the game."""
-        self.stdscr.erase()
+        try:
+            self.stdscr.erase()
 
-        if self.state == State.MENU:
-            self.draw_menu()
-        elif self.state == State.PAUSED:
-            self.draw_game()
-            self.draw_paused()
-        elif self.state == State.GAME_OVER:
-            self.draw_game()
-            self.draw_game_over()
-        else:
-            self.draw_game()
+            if self.state == State.MENU:
+                self.draw_menu()
+            elif self.state == State.PAUSED:
+                self.draw_game()
+                self.draw_paused()
+            elif self.state == State.GAME_OVER:
+                self.draw_game()
+                self.draw_game_over()
+            else:
+                self.draw_game()
 
-        self.stdscr.refresh()
+            self.stdscr.refresh()
+        except curses.error:
+            # Terminal too small or other curses error - ignore
+            pass
 
     def draw_menu(self) -> None:
         """Draw the menu screen."""
