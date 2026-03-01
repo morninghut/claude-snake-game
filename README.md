@@ -91,7 +91,11 @@ WASD/Arrows: Move | Space: Pause | R: Restart | Q: Menu
 
 ## 更新日志
 
-### v2.1 (Latest)
+### v2.1.1 (Latest)
+- 修复：分数弹出效果在游戏结束后不再显示
+- 修复：游戏结束后现在会显示分数再退出
+
+### v2.1
 - **新增游戏模式**：Classic、Time Attack、Zen、Survival
 - **Unicode 支持**：更美观的边框和符号
 - **视觉效果**：食物脉冲动画、分数弹出
