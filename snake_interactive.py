@@ -9,6 +9,7 @@ import random
 import time
 import os
 import json
+from collections import deque
 
 # Game states
 STATE_MENU = 0
@@ -42,20 +43,20 @@ class SnakeGame:
 
     def init_game(self):
         self.state = STATE_PLAYING
-        self.paused = False
         self.game_over = False
         self.score = 0
         self.speed = self.base_speed
         self.food_eaten = 0
         self.high_score = self.load_high_score()
-        self.powerup = POWERUP_NONE
         self.powerup_timer = 0
+        self.snake_set = set()  # For O(1) collision detection
 
         mid_x, mid_y = self.width // 2, self.height // 2
         self.snake = [(mid_x, mid_y), (mid_x - 1, mid_y), (mid_x - 2, mid_y)]
+        self.snake_set = set(self.snake)
         self.direction = (1, 0)
         self.next_direction = (1, 0)
-        self.input_queue = []  # Input buffer
+        self.input_queue = deque()  # Input buffer using deque for O(1)
         self.spawn_food()
         self.spawn_powerup()
 
@@ -63,8 +64,9 @@ class SnakeGame:
         while True:
             x = random.randint(1, self.width - 2)
             y = random.randint(1, self.height - 2)
-            if (x, y) not in self.snake and (x, y) != getattr(self, 'powerup_pos', (-1, -1)):
-                self.food = (x, y)
+            pos = (x, y)
+            if pos not in self.snake_set and pos != getattr(self, 'powerup_pos', (-1, -1)):
+                self.food = pos
                 break
 
     def spawn_powerup(self):
@@ -72,8 +74,9 @@ class SnakeGame:
             while True:
                 x = random.randint(1, self.width - 2)
                 y = random.randint(1, self.height - 2)
-                if (x, y) not in self.snake and (x, y) != self.food:
-                    self.powerup_pos = (x, y)
+                pos = (x, y)
+                if pos not in self.snake_set and pos != self.food:
+                    self.powerup_pos = pos
                     self.powerup_type = random.choice([POWERUP_SLOW, POWERUP_DOUBLE])
                     break
         else:
@@ -120,7 +123,9 @@ class SnakeGame:
             elif key in (ord('q'), 27):
                 self.state = STATE_GAME_OVER
                 self.game_over = True
-            return
+                self.save_high_score()
+                self.quit = True
+                return
 
         # Game over controls
         if self.state == STATE_GAME_OVER:
@@ -166,12 +171,12 @@ class SnakeGame:
                 self.input_queue.append(direction_map[key])
 
     def update(self):
-        if self.state != STATE_PLAYING or self.paused:
+        if self.state != STATE_PLAYING:
             return
 
-        # Process input queue
+        # Process input queue (deque.popleft is O(1))
         if self.input_queue:
-            new_dir = self.input_queue.pop(0)
+            new_dir = self.input_queue.popleft()
             if (new_dir[0] + self.direction[0] != 0 or
                 new_dir[1] + self.direction[1] != 0):
                 self.next_direction = new_dir
@@ -189,14 +194,15 @@ class SnakeGame:
             curses.beep()
             return
 
-        # Self collision
-        if new_head in self.snake:
+        # Self collision (use set for O(1) lookup)
+        if new_head in self.snake_set:
             self.game_over = True
             self.state = STATE_GAME_OVER
             curses.beep()
             return
 
         self.snake.insert(0, new_head)
+        self.snake_set.add(new_head)
 
         # Power-up collision
         if new_head == self.powerup_pos:
@@ -218,15 +224,16 @@ class SnakeGame:
             if self.food_eaten % 5 == 0:
                 self.speed = int(self.speed * 0.85)
 
-            # Clear power-up effect
-            if self.powerup_timer > 0:
-                self.powerup_timer -= 1
-                if self.powerup_timer == 0:
-                    self.speed = int(self.speed / 1.3)
-
             self.spawn_food()
         else:
-            self.snake.pop()
+            tail = self.snake.pop()
+            self.snake_set.discard(tail)
+
+        # Update power-up timer every frame
+        if self.powerup_timer > 0:
+            self.powerup_timer -= 1
+            if self.powerup_timer == 0:
+                self.speed = int(self.speed / 1.3)
 
     def draw(self):
         self.stdscr.clear()
@@ -339,15 +346,18 @@ class SnakeGame:
     def run(self):
         curses.curs_set(0)
         self.stdscr.nodelay(True)
-        self.stdscr.timeout(50)
+        self.stdscr.timeout(10)  # More responsive input
+        self.quit = False
 
-        while self.state != STATE_GAME_OVER or self.game_over:
+        while not self.quit:
             self.handle_input()
 
             if self.state == STATE_PLAYING:
                 # Use napms for more precise timing
                 curses.napms(self.speed)
                 self.update()
+            elif self.state == STATE_GAME_OVER and self.game_over:
+                self.quit = True
 
             self.draw()
 
@@ -359,6 +369,13 @@ class SnakeGame:
 
 
 def main(stdscr):
+    # Check terminal size
+    h, w = stdscr.getmaxyx()
+    if w < 42 or h < 22:
+        stdscr.addstr(0, 0, f"Terminal too small! Need at least 42x22, got {w}x{h}")
+        stdscr.getch()
+        return
+
     # Initialize colors
     curses.start_color()
     curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)     # Food / Game Over
