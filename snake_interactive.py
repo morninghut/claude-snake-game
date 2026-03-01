@@ -180,6 +180,11 @@ class SnakeGame:
         self.input_queue: deque = deque(maxlen=MAX_INPUT_QUEUE)
         self.frame_count = 0
 
+        # Input latency tracking
+        self.last_input_time: float = time.time()
+        self.input_latency: int = 0  # ms
+        self.latency_samples: List[int] = []
+
         # Initialize powerup_pos before spawning
         self.powerup_pos = (-1, -1)
         self.powerup_type = PowerupType.NONE
@@ -300,6 +305,18 @@ class SnakeGame:
             key = self.stdscr.getch()
         except curses.error:
             return
+
+        # Calculate input latency (for VPS/remote terminal)
+        if key != -1:
+            current_time = time.time()
+            latency_ms = int((current_time - self.last_input_time) * 1000)
+            # Only record reasonable latency values (< 5000ms)
+            if latency_ms > 10 and latency_ms < 5000:
+                self.latency_samples.append(latency_ms)
+                if len(self.latency_samples) > 20:
+                    self.latency_samples.pop(0)
+                self.input_latency = sum(self.latency_samples) // len(self.latency_samples)
+            self.last_input_time = current_time
 
         # Menu controls
         if self.state == State.MENU:
@@ -579,10 +596,10 @@ class SnakeGame:
         for wx, wy in self.walls:
             self.stdscr.addch(wy, wx, '#', curses.color_pair(2))
 
-        # Food with pulse
+        # Food with blink effect (toggle visibility)
         fx, fy = self.food
-        food_char = s['food'] if self.food_pulse < 10 else s['food_alt']
-        self.stdscr.addch(fy, fx, food_char, curses.color_pair(1) | curses.A_BOLD)
+        if self.food_pulse < FOOD_PULSE_CYCLE // 2:
+            self.stdscr.addch(fy, fx, s['food'], curses.color_pair(1) | curses.A_BOLD)
 
         # Power-up
         if self.powerup_pos != (-1, -1):
@@ -605,11 +622,6 @@ class SnakeGame:
                 color = curses.color_pair(4)
             self.stdscr.addch(sy, sx, char, color | curses.A_BOLD)
 
-        # Score popup
-        if self.score_popup and self.state == State.PLAYING:
-            pos, text, _ = self.score_popup
-            self.stdscr.addstr(pos[1], pos[0], text, curses.color_pair(2) | curses.A_BOLD)
-
         # Status bar
         status = f" Score: {self.score} | High: {self.high_score} "
         if self.game_mode == 't':
@@ -617,6 +629,9 @@ class SnakeGame:
             secs = self.time_remaining % 60
             status += f"| Time: {mins}:{secs:02d} "
         status += f"| {max(1000//self.speed, 1)}f/s"
+        # Show input latency if significant (> 50ms)
+        if self.input_latency > 50:
+            status += f" | Lag: {self.input_latency}ms"
         self.stdscr.addstr(self.height, 0, status, curses.color_pair(4))
 
         # Power-up indicator
